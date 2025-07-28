@@ -84,18 +84,28 @@ async function refreshPreview(fileSYS = null) {
     {};
   return updateRenderer(await transpileCDRCA(fileSystem));
 }
-
 function updateRenderer(newJScode) {
-  if (currentANIM) currentANIM.instantHault();
-  // console.log(newJScode);
-  eval(newJScode); // yes  we should ensure to use https (if not local hosting) now  because server returns executable and by nature of dsl it has to
-  if (!currentANIM.haulted())
-    console.warn(
-      "BUG in backend, did not changed the currentANIM variable to new instance at updateRenderer"
-    );
-  //   console.log(currentANIM);
+  if (currentANIM) {
+    currentANIM.instantHault();
+  }
 
-  currentANIM = currentANIM.init(60, true);
-  console.log(newJScode);
-  console.info("succesfully re rendered");
+  try {
+    // Store previous animation reference
+    const previousAnimKey = Math.random();
+    currentANIM.checkAnimKey = previousAnimKey;
+    // Evaluate new code
+    eval(newJScode);
+
+    // Check if currentANIM was actually updated
+    if (currentANIM.checkAnimKey === previousAnimKey) {
+      console.error("Animation was not updated by the new code");
+      return;
+    }
+
+    // Initialize new animation
+    currentANIM = currentANIM.init(60, true);
+    console.log("Successfully re-rendered");
+  } catch (err) {
+    console.error("Error updating renderer:", err);
+  }
 }

@@ -180,7 +180,7 @@ use MyProp(params) as Alias
 def PROP MyProp {
  console.log("hello world");
   }
- def ACTION ACTION_NAME MyProp METHOD_NAME PARAMS
+ def ACTION ACTION_NAME Alias METHOD_NAME PARAMS
  //gredientMap = "value"  
  //BGcolor = "color"
 

@@ -36,7 +36,7 @@ function init() {
 
   app.use(express.json());
 
-  app.use(express.static(path.join(__dirname, "../Front-end")));
+  app.use(express.static(path.join(__dirname, "../../../Front-end")));
 
   // API route: /api/TYPE
   app.post("/api/:type", (req, res) => {
@@ -47,7 +47,7 @@ function init() {
   });
 
   app.get("/", (req, res) => {
-    res.sendFile(path.join(__dirname, "../Front-end/index.html"));
+    res.sendFile(path.join(__dirname, "../../../Front-end/index.html"));
   });
 
   app.listen(PORT, () => {

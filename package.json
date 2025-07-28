@@ -1,6 +1,6 @@
 {
   "name": "cdrca",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "main": "index.js",
   "description": "cdrca is a dsl project for abstracting the animation, it use as an npm package is for programatically write videos such as new bots etc however cdrca is meant for cartoons and other type of animations too  atlhough limited by the license (as what ethics must follow)",
   "dependencies": {

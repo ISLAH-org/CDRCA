@@ -71,11 +71,20 @@ ${statment.prams.code}
   }
 
   function createActionDef(statment) {
+    // console.log(PROPStoIndex_MAP);
     let partsSTR = "";
     for (let i = 0; i < statment.prams.parts.length; i++) {
       let part = statment.prams.parts[i];
+      // console.log(part.propName);
+      let propIndex = PROPStoIndex_MAP[part.propName];
+      if (!propIndex) {
+        console.log(
+          "Prop index is not defined using 0 as the mapped index instead"
+        );
+        propIndex = 0;
+      }
       partsSTR += `
-      propsARR[${PROPStoIndex_MAP[part.propName]}].${part.methodName}(${part.prams})
+      propsARR[${propIndex}].${part.methodName}(${part.prams})
       `;
     }
     let fn = `function ${statment.prams.name}(propsARR){
@@ -94,7 +103,7 @@ ${statment.prams.code}
     // }
   }
   function ImportEmbeding(statement, options) {
-    console.warn("import system is not working  under dev");
+    // console.warn("import system is not working  under dev");
     // // handled by the post semantic analysis
     // return {
     //   statement: statement,
@@ -135,7 +144,7 @@ ${statment.prams.code}
     };
   }
   function ADD_ImportEmbeding(statement, options) {
-    console.warn("import system is not working  under dev");
+    // console.warn("import system is not working  under dev");
     // handled by the post semantic analysis
     // return {
     //   statement: statement,
@@ -197,11 +206,10 @@ ${statment.prams.code}
         return {
           statement: statement,
           value: createActionDef,
-          postForm: true,
-          postCalledUsageSYS: {
-            used: true,
-            usedAt: "",
-            proposition: "at",
+          miniSYS: {
+            using: { forming: true },
+            settings: { forming: [{ type: "Partial_Transpiler" }] },
+            metadata: { trace: true },
           },
           type: "ACTION_DEF",
           hoisted: {
@@ -221,6 +229,7 @@ ${statment.prams.code}
       case "PROP_USE":
         lastPROPStoIndex_MAP += 1;
         PROPStoIndex_MAP[statement.prams.as] = lastPROPStoIndex_MAP;
+        // console.log("new usage", lastPROPStoIndex_MAP, statement.prams.as);
         return {
           statement: statement,
           value: createPropUSE(statement),

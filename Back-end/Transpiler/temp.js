@@ -1,19 +1,14 @@
-function createActionDef(statment) {
-  let partsSTR = "";
-  for (let i = 0; i < statment.prams.parts.length; i++) {
-    let part = statment.prams.parts[i];
-    partsSTR += `
-      propsARR[${PROPStoIndex_MAP[part.propName]}].${part.methodName}(${part.prams})    
-      `;
-  }
-  let fn = `function ${statment.prams.name}(propsARR){
-    ${partsSTR}
-    }`;
-
-  return fn;
+function ACTION_NAME(propsARR) {
+  propsARR[0].METHOD_NAME(PARAMS);
 }
 
 class MyProp extends mixClasses([
+  ObjectAnimationSystem_INS.CORE_3d_PROPSsceneSYS.Prop,
+]) {
+  // console.log("hello world");
+}
+
+class MyProp1 extends mixClasses([
   ObjectAnimationSystem_INS.CORE_3d_PROPSsceneSYS.Prop,
 ]) {
   // console.log("hello world");
