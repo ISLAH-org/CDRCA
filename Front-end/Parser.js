@@ -1,6 +1,7 @@
 // this sends request to backend
-// file system is a nested obj to represent folders and string as values for files
+// file system is a nested obj (hashmap) to represent folders and string as values for files
 async function transpileCDRCA(fileSystem) {
+  console.log(fileSystem);
   const response = await fetch("/api/transpileCDRCA", {
     method: "POST",
     headers: {
@@ -8,5 +9,7 @@ async function transpileCDRCA(fileSystem) {
     },
     body: JSON.stringify({ fileSystem }),
   });
-  return response.json();
+  let r = response.json();
+  console.log(r);
+  return r;
 }

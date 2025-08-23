@@ -1,4 +1,4 @@
-// except handleAPI  everything is by gpt 4.1  git copilot
+// excluding handleAPI  everything is by gpt 4.1  git copilot
 const { error } = require("console");
 const express = require("express");
 
@@ -11,7 +11,7 @@ function handleAPI(request, type) {
   let result = "";
   switch (type) {
     case "transpileCDRCA":
-      // console.log(request, type);
+      console.log(request, type);
       result = transpiler.transpile(request.fileSystem);
       // console.log(result);
       break;
@@ -40,6 +40,7 @@ function init() {
 
   // API route: /api/TYPE
   app.post("/api/:type", (req, res) => {
+    // console.log(req.body);
     const type = req.params.type;
     const requestJSON = req.body;
     const result = handleAPI(requestJSON, type);

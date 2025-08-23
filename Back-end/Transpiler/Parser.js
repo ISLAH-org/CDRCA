@@ -17,7 +17,7 @@ const parserConstructor = function (defaultTokenizer) {
    * - Prop Definition: def PROP PROP_NAME [abstracts OTHER_PROP] { JS code }
    * - Prop Use: use PROP_NAME(params) as ALIAS
    * - Action Definition: def ACTION ACTION_NAME PROP_NAME METHOD_NAME PARAMS [ PROP_NAME METHOD_NAME PARAMS ... ]    [] part is optional
-   * - Action Use: add new actionName STAY_TIME LERP_TIME
+   * - Action Use: add new action Name STAY_TIME LERP_TIME
    * - Defaults: gredientMap = value  /  BGcolor = color
    * - Comments: // Comment text
    *

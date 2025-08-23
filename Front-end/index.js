@@ -90,13 +90,11 @@ function updateRenderer(newJScode) {
   }
 
   try {
-    // Store previous animation reference
     const previousAnimKey = Math.random();
     currentANIM.checkAnimKey = previousAnimKey;
     // Evaluate new code
     eval(newJScode);
 
-    // Check if currentANIM was actually updated
     if (currentANIM.checkAnimKey === previousAnimKey) {
       console.error("Animation was not updated by the new code");
       return;

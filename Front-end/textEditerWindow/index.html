@@ -66,19 +66,16 @@
       // let fileSystem = { "src": { "main.js": "// main.js\nconsole.log('Hello');", "utils": { "helper.js": "// helper.js\nfunction help() {}" } }, "README.md": "# Project README" };
       let fileSystem = {
         "index.cdrca" : `
+
 !--- PROP ABC :: comment ---
 
-use MyProp(params) as Alias
-add new action abc STAY_TIME LERP_TIME MyActionInstance
+use ObjectAnimationSystem_INS.CORE_3d_PROPSsceneSYS.exampleProps.RotatingCubeProp(0x00ff00, 1) as cube
+add new action testAction 2000 500 
 
-def PROP MyProp {
- //console.log("hello world");
-  }
- def ACTION ACTION_NAME PROP_NAME METHOD_NAME PARAMS
- gredientMap = "value"  
- BGcolor = "color"
+ def ACTION testAction cube sampleMovementAction ""
 
 !---END---
+        
         `
       }
       let commits = [];

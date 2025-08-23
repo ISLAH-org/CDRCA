@@ -97,6 +97,46 @@ let ObjectAnimationSystem = function () {
       return mesh;
     }
 
+    let trackedScene = [];
+    let framesNum_tracker = 0;
+    let isTracking = true;
+
+    function getIsTracking() {
+      return isTracking;
+    }
+
+    async function getTrackedResult(endTrackingFn = () => isTracking) {
+      if (!endTrackingFn(framesNum_tracker)) {
+        return trackedScene;
+      }
+
+      await new Promise((resolve) => {
+        requestAnimationFrame(async function () {
+          await getTrackedResult(endTrackingFn);
+          resolve();
+        });
+      });
+    }
+
+    function trackManager(doTrackFn = () => true) {
+      isTracking = doTrackFn(framesNum_tracker);
+      return getTrackedResult;
+    }
+
+    function addToScene(sceneINS, item) {
+      sceneINS.add(item);
+      if (!isTracking) return;
+      if (!trackedScene[framesNum_tracker])
+        trackedScene[framesNum_tracker] = [];
+      trackedScene[framesNum_tracker].push(item);
+    }
+
+    function clearScene(sceneINS) {
+      sceneINS.clear();
+      if (!isTracking) return;
+      framesNum_tracker += 1;
+    }
+
     function updateScene(totalTime, lerpProgress) {
       scene.clear();
       scene.add(light);
@@ -161,6 +201,9 @@ let ObjectAnimationSystem = function () {
       instantHault,
       instantUnhault,
       getHault: () => ForcedHult,
+      getIsTracking,
+      trackManager,
+      getTrackedResult,
     };
   }
 
@@ -257,6 +300,10 @@ let ObjectAnimationSystem = function () {
           createMesh: true,
           modifier: { mesh: this.modifyMesh.bind(this) },
         };
+      }
+      sampleMovementAction() {
+        this.mesh.position.x = Math.sin(totalTime);
+        this.mesh.position.y = Math.cos(totalTime);
       }
     }
 
