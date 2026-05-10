@@ -198,14 +198,18 @@ currentANIM = ObjectAnimationSystem_INS.main(OAS_OBJ).init(60, true);
     },
 
     {
-      str: "var defaultGredientMap = [",
+      str: `var defaultGredientMap = [(function(){
+  const tex = new THREE.DataTexture(new Uint8Array([255, 255, 255, 255, 255, 255, 255, 255, 255]), 3, 1, THREE.RGBFormat);
+  tex.needsUpdate = true;
+  return tex;
+})()];`,
     },
     {
       placeholder: ["defaultGredientMap"],
       toString: general3DastToSTRplaceholder,
     },
     {
-      str: `]
+      str: `
 var OAS_OBJ = {
   defaultGredientMap: defaultGredientMap[0],
   scenes: [ `,

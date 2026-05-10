@@ -19,15 +19,12 @@ function handleAPI(request, type) {
     default:
       break;
   }
-  return (
-    JSON.stringify(result) ||
-    JSON.stringify({
-      request: request,
-      type: type,
-      success: false,
-      errors: ["unknown type"],
-    })
-  );
+  return result || {
+    request: request,
+    type: type,
+    success: false,
+    errors: ["unknown type"],
+  };
 }
 
 function init() {
@@ -38,7 +35,10 @@ function init() {
 
   app.use(express.static(path.join(__dirname, "../../../Front-end")));
 
-  // API route: /api/TYPE
+  // Serve Monaco editor files from textEditerWindow/monaco
+  app.use("/monaco", express.static(path.join(__dirname, "../../../Front-end/textEditerWindow/monaco")));
+
+  // API route: /api/:type
   app.post("/api/:type", (req, res) => {
     // console.log(req.body);
     const type = req.params.type;

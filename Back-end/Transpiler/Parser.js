@@ -344,8 +344,16 @@ const parserConstructor = function (defaultTokenizer) {
         pos++;
         if (pos >= tokens.length || tokens[pos].type !== "identifier")
           throw new Error("Expected other PROP name after 'abstracts'");
+        // Handle dotted namespaced prop names like A.B.C
         optionOtherPROP = tokens[pos].value;
         pos++;
+        while (pos < tokens.length && tokens[pos].value === ".") {
+          pos++;
+          if (pos >= tokens.length || tokens[pos].type !== "identifier")
+            throw new Error("Expected identifier after '.' in abstracts clause");
+          optionOtherPROP += "." + tokens[pos].value;
+          pos++;
+        }
       }
       if (pos >= tokens.length || tokens[pos].value !== "{")
         throw new Error("Expected '{' in prop definition");
@@ -378,8 +386,16 @@ const parserConstructor = function (defaultTokenizer) {
       while (pos < tokens.length && tokens[pos].type !== "newline") {
         if (tokens[pos].type !== "identifier")
           throw new Error("Expected prop name in action definition");
-        const propName = tokens[pos].value;
+        // Handle dotted namespaced prop names like A.B.C
+        let propName = tokens[pos].value;
         pos++;
+        while (pos < tokens.length && tokens[pos].value === ".") {
+          pos++;
+          if (pos >= tokens.length || tokens[pos].type !== "identifier")
+            throw new Error("Expected identifier after '.' in action definition");
+          propName += "." + tokens[pos].value;
+          pos++;
+        }
         if (pos >= tokens.length || tokens[pos].type !== "identifier")
           throw new Error("Expected method name in action definition");
         const methodName = tokens[pos].value;
@@ -405,8 +421,16 @@ const parserConstructor = function (defaultTokenizer) {
       pos++;
       if (pos >= tokens.length || tokens[pos].type !== "identifier")
         throw new Error("Expected prop name after 'use'");
-      const name = tokens[pos].value;
+      // Handle dotted namespaced identifiers like A.B.C
+      let name = tokens[pos].value;
       pos++;
+      while (pos < tokens.length && tokens[pos].value === ".") {
+        pos++;
+        if (pos >= tokens.length || tokens[pos].type !== "identifier")
+          throw new Error("Expected identifier after '.' in prop use");
+        name += "." + tokens[pos].value;
+        pos++;
+      }
       if (pos >= tokens.length || tokens[pos].value !== "(")
         throw new Error("Expected '(' in prop use");
       pos++;

@@ -1,0 +1,21 @@
+!--- SCENE Main :: Bouncing balls demo ---
+
+// Use two different example props
+use ObjectAnimationSystem_INS.CORE_3d_PROPSsceneSYS.exampleProps.BouncingSphereProp() as ball1
+use ObjectAnimationSystem_INS.CORE_3d_PROPSsceneSYS.exampleProps.RotatingCubeProp(0xff0000, 1) as cube
+
+// Action 1: Bounce the ball
+add new action bounce1 2000 500
+
+// Action 2: Rotate the cube
+add new action spin 1500 300
+
+// Action 3: Both together
+add new action combo 3000 500
+
+def ACTION bounce1 ball1 modifyMesh ""
+def ACTION spin cube modifyMesh ""
+def ACTION combo ball1 modifyMesh ""
+def ACTION combo cube modifyMesh ""
+
+!---END---

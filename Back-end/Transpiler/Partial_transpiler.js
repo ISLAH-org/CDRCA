@@ -77,18 +77,21 @@ ${statment.prams.code}
       let part = statment.prams.parts[i];
       // console.log(part.propName);
       let propIndex = PROPStoIndex_MAP[part.propName];
-      if (!propIndex) {
+      if (propIndex === undefined) {
         console.log(
           "Prop index is not defined using 0 as the mapped index instead"
         );
         propIndex = 0;
       }
       partsSTR += `
-      propsARR[${propIndex}].${part.methodName}(${part.prams})
+      propsARR[${propIndex}].${part.methodName}(mesh, totalTime, lerpProgress, step, ${part.prams})
       `;
     }
     let fn = `function ${statment.prams.name}(propsARR){
-    ${partsSTR}
+    return propsARR.map((prop, index) => (mesh, totalTime, lerpProgress, step) => {
+      ${partsSTR}
+      return mesh;
+    });
     }`;
 
     return fn;
@@ -351,6 +354,10 @@ defaultGredientMap: new THREE.DataTexture(
     if (!Array.isArray(ast)) {
       throw new Error("AST must be an array");
     }
+
+    // Reset prop index map for each new transpilation
+    PROPStoIndex_MAP = {};
+    lastPROPStoIndex_MAP = -1;
 
     const stack = [];
     let codeBlocks = [];

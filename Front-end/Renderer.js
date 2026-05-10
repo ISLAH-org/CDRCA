@@ -301,9 +301,10 @@ let ObjectAnimationSystem = function () {
           modifier: { mesh: this.modifyMesh.bind(this) },
         };
       }
-      sampleMovementAction() {
-        this.mesh.position.x = Math.sin(totalTime);
-        this.mesh.position.y = Math.cos(totalTime);
+      sampleMovementAction(mesh, totalTime, lerpProgress, step) {
+        mesh.position.x = Math.sin(totalTime);
+        mesh.position.y = Math.cos(totalTime);
+        return mesh;
       }
     }
 

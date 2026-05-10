@@ -9,7 +9,7 @@ async function transpileCDRCA(fileSystem) {
     },
     body: JSON.stringify({ fileSystem }),
   });
-  let r = response.json();
-  console.log(r);
-  return r;
+  const code = await response.json();
+  console.log(code);
+  return code;
 }
