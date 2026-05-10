@@ -17,7 +17,7 @@ CDRCA aims to solve these problems by providing an intuitive Domain-Specific Lan
 You can get started with CDRCA in one of the following ways:
 
 - Download the latest release from the project page.
-- Clone the repository: `git clone https://github.com/Muhammad-Ayyan-no1/CDRCA-animation-dsl.git`
+- Clone the repository: `git clone https://github.com/ISLAH-org/CDRCA.git`
 - Install via npm: `npm install cdrca`
 
 To see the language in action, check out the examples here: [CDRCA Examples](https://github.com/Muhammad-Ayyan-no1/CDRCA-animation-dsl/tree/main/examples).
