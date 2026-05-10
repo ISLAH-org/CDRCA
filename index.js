@@ -2,4 +2,5 @@ const Servers = require("./Back-end/serverManager.js");
 
 Servers.main.init();
 
-console.error("CDRCA is under development");
+// Release 1, production version 0, local version 6,s
+console.log("CDRCA 01.00.06v");
