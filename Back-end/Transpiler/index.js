@@ -8,6 +8,7 @@ const Partial_transpiler = require("./Partial_transpiler");
 const postSemanticAnalyzier = require("./postSemanticAnalyizer");
 const fullTranspiler = require("./FullTranspiler");
 const postOptionalParser = require("./PostOptionalParsing");
+const pluginAPI = require("./plugin");
 
 // system imports
 const miniSYS = require("./MINI_SYS/index");
@@ -80,9 +81,27 @@ function getVFScontent(vfs, path) {
   return r;
 }
 
+function loadPluginsFromOptions(options) {
+  if (options && options.plugins && !options._pluginsLoaded) {
+    pluginAPI.clear();
+    for (const plugin of options.plugins) {
+      if (typeof plugin === "function") {
+        plugin(pluginAPI);
+      }
+    }
+    options._pluginsLoaded = true;
+  }
+}
+
 function tillPartialTranspilationTranspiler_UniFile(cdrcaCode, options) {
+  loadPluginsFromOptions(options);
+  let code = pluginAPI.run("before", "parse", cdrcaCode, options);
+
   // tokenization to parsing
-  let ast = parser_INS.parse(cdrcaCode);
+  let ast = parser_INS.parse(code);
+  ast = pluginAPI.run("after", "parse", ast, options);
+  ast = pluginAPI.run("before", "partialTranspile", ast, options);
+
   // parses induvidual statments and chunks
   let partialTranspiled = partial_transpiler_INS.transpile(
     ast,
@@ -90,6 +109,8 @@ function tillPartialTranspilationTranspiler_UniFile(cdrcaCode, options) {
     mainUniFile,
     mainMultiFile
   );
+  partialTranspiled = pluginAPI.run("after", "partialTranspile", partialTranspiled, options);
+
   return partialTranspiled;
 }
 
@@ -100,11 +121,14 @@ function mainMultiFile(
   mainPath = ["index.cdrca", "main.cdrca"],
   uniFN = mainUniFile
 ) {
-  // console.log(VFS);
-  let mainFile = getVFScontent(VFS, mainPath);
+  loadPluginsFromOptions(options);
+  let hookedVFS = pluginAPI.run("before", "multiFile", VFS, options);
+
+  // console.log(hookedVFS);
+  let mainFile = getVFScontent(hookedVFS, mainPath);
   let transpiled = uniFN(mainFile, {
     VFS: {
-      ...VFS,
+      ...hookedVFS,
       ...(options.VFS || {}),
     },
     // this is for system fns idk but users can edit it for super customization since its in options
@@ -114,13 +138,21 @@ function mainMultiFile(
     },
     ...(options || {}),
   });
-  // console.log(transpiled);
-  return transpiled;
+
+  let finalTranspiled = pluginAPI.run("after", "multiFile", transpiled, hookedVFS, options);
+  // console.log(finalTranspiled);
+  return finalTranspiled;
 }
 
 function mainUniFile(cdrcaCode, options) {
+  loadPluginsFromOptions(options);
+  let code = pluginAPI.run("before", "parse", cdrcaCode, options);
+
   // tokenization to parsing
-  let ast = parser_INS.parse(cdrcaCode);
+  let ast = parser_INS.parse(code);
+  ast = pluginAPI.run("after", "parse", ast, options);
+  ast = pluginAPI.run("before", "partialTranspile", ast, options);
+
   // parses induvidual statments and chunks
   let partialTranspiled = partial_transpiler_INS.transpile(
     ast,
@@ -128,25 +160,33 @@ function mainUniFile(cdrcaCode, options) {
     mainUniFile,
     mainMultiFile
   );
-  // console.log(partialTranspiled.length);
+  partialTranspiled = pluginAPI.run("after", "partialTranspile", partialTranspiled, options);
+  partialTranspiled = pluginAPI.run("before", "semanticAnalyze", partialTranspiled, ast, options);
+
   // orders those chunks (hoists etc) and adds automatic comments (options)
   let postSemanticAnalyzed = postSemanticAnalyizer_INS.analyze(
     partialTranspiled,
     ast,
     options
   );
+  postSemanticAnalyzed = pluginAPI.run("after", "semanticAnalyze", postSemanticAnalyzed, options);
+  postSemanticAnalyzed = pluginAPI.run("before", "fullTranspile", postSemanticAnalyzed, options);
+
   // fully combines the code and  template fills the chunks based on Renderer api
   let fullyTranspiled = fullTranspiler_INS.transpile(postSemanticAnalyzed);
+  fullyTranspiled = pluginAPI.run("after", "fullTranspile", fullyTranspiled, options);
+  fullyTranspiled = pluginAPI.run("before", "postOptionalParse", fullyTranspiled, options);
 
   // pretifies code and other options (options)
   let postOptionalParsed = postOptionalParser_INS.update(
     fullyTranspiled,
     options
   );
+  let finalResult = postOptionalParsed || fullyTranspiled;
+  finalResult = pluginAPI.run("after", "postOptionalParse", finalResult, options);
 
   return (
-    postOptionalParsed ||
-    fullyTranspiled ||
+    finalResult ||
     'console.error("An error occured during backend parsing, contact the devlopers and create a new issue with the error at github if your unsure at https://github.com/Muhammad-Ayyan-no1/CDRCA-animation-dsl/issues" + " error : for some unknown reason final transpiled JAVASCRIPT code was undefined")'
   );
 }
