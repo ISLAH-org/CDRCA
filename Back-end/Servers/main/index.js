@@ -11,7 +11,7 @@ function handleAPI(request, type) {
   let result = "";
   switch (type) {
     case "transpileCDRCA":
-      console.log(request, type);
+      // console.log(request, type);
       result = transpiler.transpile(request.fileSystem);
       // console.log(result);
       break;
@@ -19,12 +19,14 @@ function handleAPI(request, type) {
     default:
       break;
   }
-  return result || {
-    request: request,
-    type: type,
-    success: false,
-    errors: ["unknown type"],
-  };
+  return (
+    result || {
+      request: request,
+      type: type,
+      success: false,
+      errors: ["unknown type"],
+    }
+  );
 }
 
 function init() {
@@ -36,7 +38,12 @@ function init() {
   app.use(express.static(path.join(__dirname, "../../../Front-end")));
 
   // Serve Monaco editor files from textEditerWindow/monaco
-  app.use("/monaco", express.static(path.join(__dirname, "../../../Front-end/textEditerWindow/monaco")));
+  app.use(
+    "/monaco",
+    express.static(
+      path.join(__dirname, "../../../Front-end/textEditerWindow/monaco"),
+    ),
+  );
 
   // API route: /api/:type
   app.post("/api/:type", (req, res) => {

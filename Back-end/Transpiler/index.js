@@ -107,9 +107,14 @@ function tillPartialTranspilationTranspiler_UniFile(cdrcaCode, options) {
     ast,
     options,
     mainUniFile,
-    mainMultiFile
+    mainMultiFile,
   );
-  partialTranspiled = pluginAPI.run("after", "partialTranspile", partialTranspiled, options);
+  partialTranspiled = pluginAPI.run(
+    "after",
+    "partialTranspile",
+    partialTranspiled,
+    options,
+  );
 
   return partialTranspiled;
 }
@@ -119,7 +124,7 @@ function mainMultiFile(
   VFS,
   options = {},
   mainPath = ["index.cdrca", "main.cdrca"],
-  uniFN = mainUniFile
+  uniFN = mainUniFile,
 ) {
   loadPluginsFromOptions(options);
   let hookedVFS = pluginAPI.run("before", "multiFile", VFS, options);
@@ -139,7 +144,13 @@ function mainMultiFile(
     ...(options || {}),
   });
 
-  let finalTranspiled = pluginAPI.run("after", "multiFile", transpiled, hookedVFS, options);
+  let finalTranspiled = pluginAPI.run(
+    "after",
+    "multiFile",
+    transpiled,
+    hookedVFS,
+    options,
+  );
   // console.log(finalTranspiled);
   return finalTranspiled;
 }
@@ -158,32 +169,68 @@ function mainUniFile(cdrcaCode, options) {
     ast,
     options,
     mainUniFile,
-    mainMultiFile
+    mainMultiFile,
   );
-  partialTranspiled = pluginAPI.run("after", "partialTranspile", partialTranspiled, options);
-  partialTranspiled = pluginAPI.run("before", "semanticAnalyze", partialTranspiled, ast, options);
+  partialTranspiled = pluginAPI.run(
+    "after",
+    "partialTranspile",
+    partialTranspiled,
+    options,
+  );
+  partialTranspiled = pluginAPI.run(
+    "before",
+    "semanticAnalyze",
+    partialTranspiled,
+    ast,
+    options,
+  );
 
   // orders those chunks (hoists etc) and adds automatic comments (options)
   let postSemanticAnalyzed = postSemanticAnalyizer_INS.analyze(
     partialTranspiled,
     ast,
-    options
+    options,
   );
-  postSemanticAnalyzed = pluginAPI.run("after", "semanticAnalyze", postSemanticAnalyzed, options);
-  postSemanticAnalyzed = pluginAPI.run("before", "fullTranspile", postSemanticAnalyzed, options);
+  postSemanticAnalyzed = pluginAPI.run(
+    "after",
+    "semanticAnalyze",
+    postSemanticAnalyzed,
+    options,
+  );
+  postSemanticAnalyzed = pluginAPI.run(
+    "before",
+    "fullTranspile",
+    postSemanticAnalyzed,
+    options,
+  );
 
   // fully combines the code and  template fills the chunks based on Renderer api
   let fullyTranspiled = fullTranspiler_INS.transpile(postSemanticAnalyzed);
-  fullyTranspiled = pluginAPI.run("after", "fullTranspile", fullyTranspiled, options);
-  fullyTranspiled = pluginAPI.run("before", "postOptionalParse", fullyTranspiled, options);
+  fullyTranspiled = pluginAPI.run(
+    "after",
+    "fullTranspile",
+    fullyTranspiled,
+    options,
+  );
+  fullyTranspiled = pluginAPI.run(
+    "before",
+    "postOptionalParse",
+    fullyTranspiled,
+    options,
+  );
 
   // pretifies code and other options (options)
   let postOptionalParsed = postOptionalParser_INS.update(
     fullyTranspiled,
-    options
+    options,
   );
   let finalResult = postOptionalParsed || fullyTranspiled;
-  finalResult = pluginAPI.run("after", "postOptionalParse", finalResult, options);
+  finalResult = pluginAPI.run(
+    "after",
+    "postOptionalParse",
+    finalResult,
+    options,
+  );
 
   return (
     finalResult ||
@@ -206,37 +253,37 @@ function mainUniFile(cdrcaCode, options) {
 // let Parttranspiled = partial_transpiler_INS.transpile(ast);
 // console.log(JSON.stringify(Parttranspiled, null, 2));
 
-console.log(
-  "\n\n result \n\n",
-  mainMultiFile(
-    {
-      "index.cdrca": `
-      @IMPORT "./a.cdrca"
-!--- PROP ABC :: comment ---
+// console.log(
+//   "\n\n result \n\n",
+//   mainMultiFile(
+//     {
+//       "index.cdrca": `
+//       @IMPORT "./a.cdrca"
+// !--- PROP ABC :: comment ---
 
-use MyProp(params) as Alias
-//add new action abc STAY_TIME LERP_TIME MyActionInstance
+// use MyProp(params) as Alias
+// //add new action abc STAY_TIME LERP_TIME MyActionInstance
 
-def PROP MyProp {
- console.log("hello world");
-  }
- def ACTION ACTION_NAME Alias METHOD_NAME PARAMS
- //gredientMap = "value"  
- //BGcolor = "color"
+// def PROP MyProp {
+//  console.log("hello world");
+//   }
+//  def ACTION ACTION_NAME Alias METHOD_NAME PARAMS
+//  //gredientMap = "value"
+//  //BGcolor = "color"
 
-!---END---
-`,
-      "a.cdrca": `
-def PROP MyProp1 {
- console.log("hello world");
-  }
-`,
-    },
-    {
-      addComments: true,
-    }
-  )
-);
+// !---END---
+// `,
+//       "a.cdrca": `
+// def PROP MyProp1 {
+//  console.log("hello world");
+//   }
+// `,
+//     },
+//     {
+//       addComments: true,
+//     }
+//   )
+// );
 
 module.exports = {
   transpile: mainMultiFile,

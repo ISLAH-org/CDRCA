@@ -484,9 +484,9 @@ const parserConstructor = function (defaultTokenizer) {
       const lerpTime = tokens[pos].value;
       pos++;
       let actionUseName;
-      if (pos >= tokens.length || tokens[pos].value === "\n") {
-        // throw new Error("Expected lerp time in action use");
-        console.info("action use name not found, defaulting");
+      if (pos >= tokens.length || tokens[pos].type === "newline" || tokens[pos].value === "\n") {
+        // actionUseName is optional per the DSL syntax: add new action Name STAY_TIME LERP_TIME
+        // Auto-generate a unique name when not provided
         actionUseName =
           actionName + "_Use" + String(Math.random()).replace("0.", "");
       } else {
