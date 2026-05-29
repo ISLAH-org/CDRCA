@@ -5,7 +5,8 @@
   "description": "cdrca is a dsl project for abstracting the animation, it use as an npm package is for programatically write videos such as new bots etc however cdrca is meant for cartoons and other type of animations too  atlhough limited by the license (as what ethics must follow)",
   "dependencies": {
     "express": "^5.1.0",
-    "prettier": "^3.6.2"
+    "prettier": "^3.6.2",
+    "vm": "^0.1.0"
   },
   "keywords": [
     "cdrca",
