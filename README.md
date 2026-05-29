@@ -28,6 +28,25 @@ To see the language in action, check out the examples here: [CDRCA Examples](htt
 
 Official documentation is currently in development and will be available soon.
 
+### Plugin-aware DSL extensions (experimental)
+
+CDRCA now supports plugin declarations directly in DSL code and syntax-plugin hooks:
+
+- File-level plugin requirements:
+  - `@requires pluginA pluginB`
+  - `@syntaxPlugin syntaxPluginA`
+- Header-level plugin requirements:
+  - Add `requires ...` and `syntaxPlugin ...` in header keywords.
+- Embedded plugin definitions:
+  - `plugin myPlugin scope file trusted true { ... }`
+  - Embedded plugins are in-memory and not written to disk.
+
+Hook support includes existing lifecycle phases plus syntax/AST/exec granular hooks:
+
+- Existing: `before/after parse`, `before/after partialTranspile`, `before/after semanticAnalyze`, `before/after fullTranspile`, `before/after postOptionalParse`
+- Syntax: `syntax.beforeTokenize`, `syntax.afterTokenize`, `syntax.customRule`, `syntax.afterParseNode`
+- AST/Exec granularity: `ast.visitHeader`, `ast.visitSubHeader`, `ast.visitStatement`, `exec.beforeSwitch`, `exec.beforeIf`, `exec.beforeLoop`, `exec.afterLoop`
+
 ---
 
 ## Team Paradigm

@@ -50,7 +50,7 @@ ObjectAnimationSystem_INS.main({
 
 so we just needs to define stuff outside this obj like actions      and just translate rest to a js obj
 */
-const createTranspiler = function (parser, sysPrams) {
+const createTranspiler = function (parser, sysPrams, pluginAPI) {
   var PROPStoIndex_MAP = {};
   var lastPROPStoIndex_MAP = -1;
 
@@ -175,6 +175,46 @@ ${statment.prams.code}
     };
   }
   function transpileStatement(statement, options) {
+    const stmtType = statement && statement.type ? statement.type : "unknown";
+    let transformedStatement = statement;
+    if (pluginAPI && typeof pluginAPI.run === "function") {
+      transformedStatement = pluginAPI.run(
+        "ast",
+        "visitStatement",
+        transformedStatement,
+        { statementType: stmtType, options },
+        { __pluginMeta: true, pluginNames: (options.pluginSelection || {}).fileRequires || [] }
+      );
+      if (stmtType === "ACTION_USE") {
+        transformedStatement = pluginAPI.run(
+          "exec",
+          "beforeSwitch",
+          transformedStatement,
+          { options },
+          { __pluginMeta: true, pluginNames: (options.pluginSelection || {}).fileRequires || [] }
+        );
+      }
+      if (stmtType === "PROP_USE") {
+        transformedStatement = pluginAPI.run(
+          "exec",
+          "beforeIf",
+          transformedStatement,
+          { options },
+          { __pluginMeta: true, pluginNames: (options.pluginSelection || {}).fileRequires || [] }
+        );
+      }
+      if (stmtType === "ACTION_DEF") {
+        transformedStatement = pluginAPI.run(
+          "exec",
+          "beforeLoop",
+          transformedStatement,
+          { options },
+          { __pluginMeta: true, pluginNames: (options.pluginSelection || {}).fileRequires || [] }
+        );
+      }
+    }
+
+    statement = transformedStatement || statement;
     switch (statement.type) {
       case "IMPORT":
         return ImportEmbeding(statement, options);
@@ -290,6 +330,24 @@ defaultGredientMap: new THREE.DataTexture(
           type: "COMMENT",
         };
         break;
+      case "REQUIRES_PLUGINS":
+        return {
+          statement,
+          value: "",
+          type: "PLUGIN_DIRECTIVE",
+        };
+      case "SYNTAX_PLUGINS":
+        return {
+          statement,
+          value: "",
+          type: "PLUGIN_DIRECTIVE",
+        };
+      case "PLUGIN_DEF":
+        return {
+          statement,
+          value: "",
+          type: "PLUGIN_DEF",
+        };
       default:
         throw new Error(`Unknown statement type: ${statement.type}`);
         break;
@@ -373,6 +431,21 @@ defaultGredientMap: new THREE.DataTexture(
         const statementsCode = transpileStatements(node.VALUE, options);
         codeBlocks.push(...MakeARR(statementsCode));
       } else if (node.TYPE === "HEADER") {
+        if (pluginAPI && typeof pluginAPI.run === "function") {
+          pluginAPI.run(
+            "ast",
+            "visitHeader",
+            node,
+            { options },
+            {
+              __pluginMeta: true,
+              pluginNames: [
+                ...((options.pluginSelection || {}).fileRequires || []),
+                ...(((node.VALUE || {}).META || {}).requires || []),
+              ],
+            }
+          );
+        }
         // Add opening spacer
         codeBlocks.push({
           prams: {
@@ -403,6 +476,21 @@ defaultGredientMap: new THREE.DataTexture(
           ast: node,
         });
       } else if (node["SUB-HEADER"]) {
+        if (pluginAPI && typeof pluginAPI.run === "function") {
+          pluginAPI.run(
+            "ast",
+            "visitSubHeader",
+            node,
+            { options },
+            {
+              __pluginMeta: true,
+              pluginNames: [
+                ...((options.pluginSelection || {}).fileRequires || []),
+                ...((((node["SUB-HEADER"] || [])[0] || {}).META || {}).requires || []),
+              ],
+            }
+          );
+        }
         // Add opening spacer
         codeBlocks.push({
           prams: {
@@ -538,6 +626,16 @@ defaultGredientMap: new THREE.DataTexture(
       };
       codeBlocks = sysPrams.miniSYS.applyMiniSys(codeBlocks, processSettings);
     })();
+
+    if (pluginAPI && typeof pluginAPI.run === "function") {
+      codeBlocks = pluginAPI.run(
+        "exec",
+        "afterLoop",
+        codeBlocks,
+        { options },
+        { __pluginMeta: true, pluginNames: (options.pluginSelection || {}).fileRequires || [] }
+      );
+    }
 
     return codeBlocks;
   }

@@ -1,7 +1,7 @@
 // const defaultTokenizer = require("./Tokenizer").defaultTokenizer;
 
 // because I need default tokenizer etc        since index.js is centeral i need a constructor, iife is easiest
-const parserConstructor = function (defaultTokenizer) {
+const parserConstructor = function (defaultTokenizer, pluginAPI) {
   /*
    * DSL Parser for .cdrca Files (Node.js Only)
    * NOTE: Originally designed by a solo compiler project dev.
@@ -31,6 +31,64 @@ const parserConstructor = function (defaultTokenizer) {
    */
 
   const OAS_PARSER = function () {
+    function normalizePluginName(raw) {
+      if (typeof raw !== "string") return null;
+      const s = raw.trim();
+      if (!s) return null;
+      // allow `a,b,c` or `a, b` styles; strip trailing commas
+      return s.replace(/,+$/, "");
+    }
+
+    function parseInlineList(words, startIndex) {
+      // Parses: name1, name2 name3, ... until next keyword or end
+      const items = [];
+      let i = startIndex;
+      for (; i < words.length; i++) {
+        const w = String(words[i] ?? "").trim();
+        if (!w) continue;
+        if (w === "requires" || w === "syntaxPlugin") break;
+        // split by commas if provided inline
+        const parts = w.split(",").map((p) => normalizePluginName(p));
+        for (const p of parts) {
+          if (p) items.push(p);
+        }
+      }
+      return { items, nextIndex: i };
+    }
+
+    function extractHeaderDirectives(usedTypes) {
+      // usedTypes comes from splitting header declaration by whitespace.
+      // We support: <headerTypes...> [requires <plugins...>] [syntaxPlugin <syntaxPlugins...>]
+      const cleanUsed = [];
+      const meta = { requires: [], syntaxPlugins: [] };
+
+      for (let i = 0; i < usedTypes.length; i++) {
+        const token = String(usedTypes[i] ?? "").trim();
+        if (!token) continue;
+
+        if (token === "requires") {
+          const { items, nextIndex } = parseInlineList(usedTypes, i + 1);
+          meta.requires.push(...items);
+          i = nextIndex - 1;
+          continue;
+        }
+        if (token === "syntaxPlugin") {
+          const { items, nextIndex } = parseInlineList(usedTypes, i + 1);
+          meta.syntaxPlugins.push(...items);
+          i = nextIndex - 1;
+          continue;
+        }
+
+        cleanUsed.push(token);
+      }
+
+      // de-dupe but preserve order
+      meta.requires = Array.from(new Set(meta.requires));
+      meta.syntaxPlugins = Array.from(new Set(meta.syntaxPlugins));
+
+      return { usedTypes: cleanUsed, meta };
+    }
+
     // --- Header Parsing Functions ---
     function findNextHeaderStart(string, position) {
       while (position < string.length) {
@@ -138,6 +196,10 @@ const parserConstructor = function (defaultTokenizer) {
           .filter((part) => part.length > 0);
       }
 
+      const extracted = extractHeaderDirectives(usedTypes);
+      usedTypes = extracted.usedTypes;
+      const meta = extracted.meta;
+
       const subContentStart = declarationEnd + 2;
       let nesting = 1;
       let subPosition = subContentStart;
@@ -175,6 +237,7 @@ const parserConstructor = function (defaultTokenizer) {
               {
                 USED: usedTypes,
                 COMMENT: comment,
+                META: meta,
                 CODE: parsedSubContent,
               },
               endPos,
@@ -219,6 +282,10 @@ const parserConstructor = function (defaultTokenizer) {
               .filter((part) => part.length > 0);
           }
 
+          const extracted = extractHeaderDirectives(usedTypes);
+          usedTypes = extracted.usedTypes;
+          const meta = extracted.meta;
+
           const seq = C.repeat(N);
           const endTag = "!" + seq + "END" + seq;
           const headerLineEnd =
@@ -234,7 +301,12 @@ const parserConstructor = function (defaultTokenizer) {
           const parsedContent = parseContent(contentString);
           items.push({
             TYPE: "HEADER",
-            VALUE: { USED: usedTypes, COMMENT: comment, CODE: parsedContent },
+            VALUE: {
+              USED: usedTypes,
+              COMMENT: comment,
+              META: meta,
+              CODE: parsedContent,
+            },
           });
           position = endPos + endTag.length;
         } else {
@@ -249,28 +321,76 @@ const parserConstructor = function (defaultTokenizer) {
     }
 
     // --- Statement Parsing Functions ---
-    function parseStatements(code) {
-      const tokens = defaultTokenizer(code);
+    function parseStatements(code, parseMeta = {}) {
+      let source = code;
+      if (pluginAPI && typeof pluginAPI.run === "function") {
+        source = pluginAPI.run(
+          "syntax",
+          "beforeTokenize",
+          source,
+          parseMeta,
+          { __pluginMeta: true, pluginNames: parseMeta.syntaxPlugins || [] }
+        );
+      }
+      let tokens = defaultTokenizer(source);
+      if (pluginAPI && typeof pluginAPI.run === "function") {
+        tokens = pluginAPI.run(
+          "syntax",
+          "afterTokenize",
+          tokens,
+          parseMeta,
+          { __pluginMeta: true, pluginNames: parseMeta.syntaxPlugins || [] }
+        );
+      }
       const statements = [];
       let pos = 0;
       while (pos < tokens.length) {
         while (pos < tokens.length && tokens[pos].type === "newline") pos++;
         if (pos >= tokens.length) break;
-        const statement = parseStatement(tokens, pos);
-        statements.push(statement);
+        const statement = parseStatement(tokens, pos, parseMeta);
+        if (pluginAPI && typeof pluginAPI.run === "function") {
+          const maybe = pluginAPI.run(
+            "syntax",
+            "afterParseNode",
+            statement,
+            parseMeta,
+            { __pluginMeta: true, pluginNames: parseMeta.syntaxPlugins || [] }
+          );
+          statements.push(maybe);
+        } else {
+          statements.push(statement);
+        }
         pos = statement.newPosition;
       }
       return statements;
     }
 
-    function parseStatement(tokens, pos) {
+    function parseStatement(tokens, pos, parseMeta = {}) {
       // POS is inclusive like S1k1 S1k2 S2k1 S2k1 etc   here S = statment, k = keyword   the pos will always be at S1k1 or s2k2  inclusive for first token of statment (its helpful when writing parser)
       const token = tokens[pos];
+      if (pluginAPI && typeof pluginAPI.run === "function") {
+        const custom = pluginAPI.run(
+          "syntax",
+          "customRule",
+          null,
+          { tokens, pos, token, parseMeta },
+          { __pluginMeta: true, pluginNames: parseMeta.syntaxPlugins || [] }
+        );
+        if (custom && custom.newPosition !== undefined) {
+          return custom;
+        }
+      }
       switch (token.value) {
         case "@IMPORT":
           return parseImport(tokens, pos, "IMPORT");
         case "@AddImport":
           return parseImport(tokens, pos, "ADD_IMPORT");
+        case "@requires":
+          return parseDirectiveList(tokens, pos, "REQUIRES_PLUGINS");
+        case "@syntaxPlugin":
+          return parseDirectiveList(tokens, pos, "SYNTAX_PLUGINS");
+        case "plugin":
+          return parsePluginDef(tokens, pos);
         case "JS":
           return parseJSBlock(tokens, pos);
         case "def":
@@ -290,6 +410,93 @@ const parserConstructor = function (defaultTokenizer) {
             `Unexpected token at position ${pos}: ${token.value}`
           );
       }
+    }
+
+    function parsePluginDef(tokens, pos) {
+      // Syntax:
+      // plugin <name> [scope <scopeValue>] [trusted <true|false>] {
+      //   <raw hook spec/body as text>
+      // }
+      pos++;
+      if (pos >= tokens.length || tokens[pos].type !== "identifier") {
+        throw new Error("Expected plugin name after 'plugin'");
+      }
+      const name = tokens[pos].value;
+      pos++;
+
+      let scope = "file";
+      let trusted = true;
+
+      while (pos < tokens.length && tokens[pos].value !== "{") {
+        const key = tokens[pos].value;
+        pos++;
+        if (key === "scope") {
+          if (pos >= tokens.length)
+            throw new Error("Expected scope value after 'scope'");
+          scope = tokens[pos].value;
+          pos++;
+          continue;
+        }
+        if (key === "trusted") {
+          if (pos >= tokens.length)
+            throw new Error("Expected boolean value after 'trusted'");
+          trusted = String(tokens[pos].value).toLowerCase() !== "false";
+          pos++;
+          continue;
+        }
+        // ignore unknown metadata keys for forward compatibility
+        if (pos < tokens.length && tokens[pos].value !== "{") {
+          pos++;
+        }
+      }
+
+      if (pos >= tokens.length || tokens[pos].value !== "{") {
+        throw new Error("Expected '{' in plugin definition");
+      }
+      pos++;
+
+      let depth = 1;
+      const bodyTokens = [];
+      while (pos < tokens.length && depth > 0) {
+        const token = tokens[pos];
+        if (token.value === "{") depth++;
+        else if (token.value === "}") depth--;
+        if (depth > 0) bodyTokens.push(token);
+        pos++;
+      }
+
+      if (depth !== 0) {
+        throw new Error("Unclosed plugin definition block");
+      }
+
+      const body = bodyTokens.map((t) => t.value).join("");
+      return {
+        type: "PLUGIN_DEF",
+        prams: {
+          name,
+          scope,
+          trusted,
+          body,
+        },
+        newPosition: pos,
+      };
+    }
+
+    function parseDirectiveList(tokens, pos, type) {
+      // Format: @requires "a" "b" OR @requires a b OR @requires a,b,c
+      pos++;
+      const values = [];
+      while (pos < tokens.length && tokens[pos].type !== "newline") {
+        const t = tokens[pos];
+        const vRaw =
+          t.type === "string" ? t.value.slice(1, -1) : String(t.value);
+        const parts = vRaw.split(",").map((p) => normalizePluginName(p));
+        for (const p of parts) {
+          if (p) values.push(p);
+        }
+        pos++;
+      }
+      return { type, prams: { values: Array.from(new Set(values)) }, newPosition: pos };
     }
 
     function parseImport(tokens, pos, type) {
@@ -528,7 +735,7 @@ const parserConstructor = function (defaultTokenizer) {
     }
 
     // --- AST Processing ---
-    function processCodeList(codeList) {
+    function processCodeList(codeList, inheritedMeta = {}) {
       const result = [];
       let currentCode = "";
       for (const item of codeList) {
@@ -538,19 +745,34 @@ const parserConstructor = function (defaultTokenizer) {
           if (currentCode.trim()) {
             result.push({
               TYPE: "STATEMENTS",
-              VALUE: parseStatements(currentCode),
+              META: inheritedMeta,
+              VALUE: parseStatements(currentCode, {
+                syntaxPlugins: inheritedMeta.activeSyntaxPlugins || [],
+              }),
             });
             currentCode = "";
           }
           const subheader = item["SUB-HEADER"][0];
-          subheader.CODE = processCodeList(subheader.CODE);
+          const activeSyntaxPlugins = Array.from(
+            new Set([
+              ...((inheritedMeta && inheritedMeta.activeSyntaxPlugins) || []),
+              ...(((subheader.META || {}).syntaxPlugins) || []),
+            ])
+          );
+          subheader.ACTIVE_SYNTAX_PLUGINS = activeSyntaxPlugins;
+          subheader.CODE = processCodeList(subheader.CODE, {
+            activeSyntaxPlugins,
+          });
           result.push({ "SUB-HEADER": [subheader] });
         }
       }
       if (currentCode.trim()) {
         result.push({
           TYPE: "STATEMENTS",
-          VALUE: parseStatements(currentCode),
+          META: inheritedMeta,
+          VALUE: parseStatements(currentCode, {
+            syntaxPlugins: inheritedMeta.activeSyntaxPlugins || [],
+          }),
         });
       }
       return result;
@@ -561,9 +783,19 @@ const parserConstructor = function (defaultTokenizer) {
       return topLevelItems
         .map((item) => {
           if (item.TYPE === "CODE") {
-            return { TYPE: "STATEMENTS", VALUE: parseStatements(item.VALUE) };
+            return {
+              TYPE: "STATEMENTS",
+              META: { activeSyntaxPlugins: [] },
+              VALUE: parseStatements(item.VALUE, { syntaxPlugins: [] }),
+            };
           } else if (item.TYPE === "HEADER") {
-            item.VALUE.CODE = processCodeList(item.VALUE.CODE);
+            const activeSyntaxPlugins = Array.from(
+              new Set([...(item.VALUE.META.syntaxPlugins || [])])
+            );
+            item.VALUE.ACTIVE_SYNTAX_PLUGINS = activeSyntaxPlugins;
+            item.VALUE.CODE = processCodeList(item.VALUE.CODE, {
+              activeSyntaxPlugins,
+            });
             return item;
           }
           return item;

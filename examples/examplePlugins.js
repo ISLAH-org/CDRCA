@@ -19,6 +19,38 @@ function examplePlugin(plugin) {
   });
 }
 
+// Syntax plugin example: parse-level token interception
+function syntaxPluginExample(plugin) {
+  plugin.register(50, "syntax", "beforeTokenize", (source, parseMeta) => {
+    // Basic sugar rewrite example. Real syntax plugins can do more advanced edits.
+    return String(source).replaceAll("@useFastImport", "@AddImport");
+  });
+
+  plugin.register(40, "syntax", "afterParseNode", (node, parseMeta) => {
+    return node;
+  });
+}
+
+/*
+Embedded plugin block example (inside .cdrca):
+
+plugin myInlinePlugin scope file trusted true {
+  on 20 before parse => ctx.value;
+  on 10 after fullTranspile => "/* from embedded plugin */\n" + ctx.value;
+  on 15 syntax customRule => null;
+}
+
+File-level declaration examples:
+@requires myInlinePlugin anotherPlugin
+@syntaxPlugin syntaxPluginExample
+
+Header-level declaration examples:
+!--- SCENE Main requires myInlinePlugin syntaxPlugin syntaxPluginExample :: demo ---
+...
+!---END---
+*/
+
 module.exports = {
-  examplePlugin
+  examplePlugin,
+  syntaxPluginExample,
 };

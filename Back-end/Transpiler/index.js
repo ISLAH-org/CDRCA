@@ -22,8 +22,12 @@ let COMMON_INS = COMMON.create();
 const sysPrams = { miniSYS };
 
 // pipeline stuff
-let parser_INS = parser.create(tokenizer.defaultTokenizer);
-let partial_transpiler_INS = Partial_transpiler.create(parser_INS, sysPrams);
+let parser_INS = parser.create(tokenizer.defaultTokenizer, pluginAPI);
+let partial_transpiler_INS = Partial_transpiler.create(
+  parser_INS,
+  sysPrams,
+  pluginAPI
+);
 let postSemanticAnalyizer_INS = postSemanticAnalyzier.create(sysPrams);
 let fullTranspiler_INS = fullTranspiler.create(sysPrams);
 let postOptionalParser_INS = postOptionalParser.create(sysPrams);
@@ -93,14 +97,141 @@ function loadPluginsFromOptions(options) {
   }
 }
 
+function collectPluginStatements(ast, result = []) {
+  if (!Array.isArray(ast)) return result;
+  for (const node of ast) {
+    if (!node) continue;
+    if (node.TYPE === "STATEMENTS" && Array.isArray(node.VALUE)) {
+      for (const st of node.VALUE) {
+        if (st && st.type === "PLUGIN_DEF") {
+          result.push(st);
+        }
+      }
+    }
+    if (node.TYPE === "HEADER" && node.VALUE && Array.isArray(node.VALUE.CODE)) {
+      collectPluginStatements(node.VALUE.CODE, result);
+    } else if (node["SUB-HEADER"] && Array.isArray(node["SUB-HEADER"])) {
+      const sh = node["SUB-HEADER"][0];
+      if (sh && Array.isArray(sh.CODE)) collectPluginStatements(sh.CODE, result);
+    }
+  }
+  return result;
+}
+
+function compileEmbeddedPluginsFromAst(ast, options = {}) {
+  const pluginDefs = collectPluginStatements(ast, []);
+  const compiled = [];
+  for (const defNode of pluginDefs) {
+    const out = pluginAPI.addEmbeddedPlugin(defNode.prams, options);
+    compiled.push({
+      declaredName: defNode.prams.name,
+      runtimeName: out.runtimeName,
+      hooks: out.parsedHooks,
+      scope: defNode.prams.scope,
+      trusted: defNode.prams.trusted,
+    });
+  }
+  return compiled;
+}
+
+function derivePluginSelectionFromAst(ast) {
+  const fileRequires = new Set();
+  const fileSyntaxPlugins = new Set();
+  const headerMeta = [];
+
+  function walk(nodes, path = []) {
+    if (!Array.isArray(nodes)) return;
+    for (let i = 0; i < nodes.length; i++) {
+      const node = nodes[i];
+      if (!node) continue;
+      if (node.TYPE === "STATEMENTS" && Array.isArray(node.VALUE)) {
+        for (const st of node.VALUE) {
+          if (!st || !st.type || !st.prams) continue;
+          if (st.type === "REQUIRES_PLUGINS") {
+            (st.prams.values || []).forEach((v) => fileRequires.add(v));
+          } else if (st.type === "SYNTAX_PLUGINS") {
+            (st.prams.values || []).forEach((v) => fileSyntaxPlugins.add(v));
+          }
+        }
+      } else if (node.TYPE === "HEADER" && node.VALUE) {
+        const p = path.concat(`H${i}`);
+        const meta = (node.VALUE && node.VALUE.META) || {};
+        headerMeta.push({
+          path: p,
+          requires: Array.isArray(meta.requires) ? meta.requires : [],
+          syntaxPlugins: Array.isArray(meta.syntaxPlugins) ? meta.syntaxPlugins : [],
+        });
+        walk(node.VALUE.CODE, p);
+      } else if (node["SUB-HEADER"] && Array.isArray(node["SUB-HEADER"])) {
+        const sh = node["SUB-HEADER"][0];
+        if (!sh) continue;
+        const p = path.concat(`S${i}`);
+        const meta = sh.META || {};
+        headerMeta.push({
+          path: p,
+          requires: Array.isArray(meta.requires) ? meta.requires : [],
+          syntaxPlugins: Array.isArray(meta.syntaxPlugins) ? meta.syntaxPlugins : [],
+        });
+        walk(sh.CODE, p);
+      }
+    }
+  }
+
+  walk(ast);
+  return {
+    fileRequires: Array.from(fileRequires),
+    fileSyntaxPlugins: Array.from(fileSyntaxPlugins),
+    headerMeta,
+  };
+}
+
+function buildPluginMeta(options = {}, extras = {}) {
+  const names = new Set();
+  const selected = options.pluginSelection || {};
+  (selected.fileRequires || []).forEach((n) => names.add(n));
+  (selected.fileSyntaxPlugins || []).forEach((n) => names.add(n));
+  if (Array.isArray(options.embeddedPlugins)) {
+    options.embeddedPlugins.forEach((p) => {
+      if (p && p.declaredName) names.add(p.declaredName);
+      if (p && p.runtimeName) names.add(p.runtimeName);
+    });
+  }
+  if (Array.isArray(extras.pluginNames)) extras.pluginNames.forEach((n) => names.add(n));
+  return {
+    __pluginMeta: true,
+    pluginNames: Array.from(names),
+    ...extras,
+  };
+}
+
 function tillPartialTranspilationTranspiler_UniFile(cdrcaCode, options) {
   loadPluginsFromOptions(options);
-  let code = pluginAPI.run("before", "parse", cdrcaCode, options);
+  let code = pluginAPI.run(
+    "before",
+    "parse",
+    cdrcaCode,
+    options,
+    buildPluginMeta(options, { stage: "before_parse" })
+  );
 
   // tokenization to parsing
   let ast = parser_INS.parse(code);
-  ast = pluginAPI.run("after", "parse", ast, options);
-  ast = pluginAPI.run("before", "partialTranspile", ast, options);
+  options.pluginSelection = derivePluginSelectionFromAst(ast);
+  options.embeddedPlugins = compileEmbeddedPluginsFromAst(ast, options);
+  ast = pluginAPI.run(
+    "after",
+    "parse",
+    ast,
+    options,
+    buildPluginMeta(options, { stage: "after_parse", astMeta: options.pluginSelection })
+  );
+  ast = pluginAPI.run(
+    "before",
+    "partialTranspile",
+    ast,
+    options,
+    buildPluginMeta(options, { stage: "before_partialTranspile" })
+  );
 
   // parses induvidual statments and chunks
   let partialTranspiled = partial_transpiler_INS.transpile(
@@ -114,6 +245,7 @@ function tillPartialTranspilationTranspiler_UniFile(cdrcaCode, options) {
     "partialTranspile",
     partialTranspiled,
     options,
+    buildPluginMeta(options, { stage: "after_partialTranspile" })
   );
 
   return partialTranspiled;
@@ -157,12 +289,32 @@ function mainMultiFile(
 
 function mainUniFile(cdrcaCode, options) {
   loadPluginsFromOptions(options);
-  let code = pluginAPI.run("before", "parse", cdrcaCode, options);
+  let code = pluginAPI.run(
+    "before",
+    "parse",
+    cdrcaCode,
+    options,
+    buildPluginMeta(options, { stage: "before_parse" })
+  );
 
   // tokenization to parsing
   let ast = parser_INS.parse(code);
-  ast = pluginAPI.run("after", "parse", ast, options);
-  ast = pluginAPI.run("before", "partialTranspile", ast, options);
+  options.pluginSelection = derivePluginSelectionFromAst(ast);
+  options.embeddedPlugins = compileEmbeddedPluginsFromAst(ast, options);
+  ast = pluginAPI.run(
+    "after",
+    "parse",
+    ast,
+    options,
+    buildPluginMeta(options, { stage: "after_parse", astMeta: options.pluginSelection })
+  );
+  ast = pluginAPI.run(
+    "before",
+    "partialTranspile",
+    ast,
+    options,
+    buildPluginMeta(options, { stage: "before_partialTranspile" })
+  );
 
   // parses induvidual statments and chunks
   let partialTranspiled = partial_transpiler_INS.transpile(
@@ -176,6 +328,7 @@ function mainUniFile(cdrcaCode, options) {
     "partialTranspile",
     partialTranspiled,
     options,
+    buildPluginMeta(options, { stage: "after_partialTranspile" })
   );
   partialTranspiled = pluginAPI.run(
     "before",
@@ -183,6 +336,7 @@ function mainUniFile(cdrcaCode, options) {
     partialTranspiled,
     ast,
     options,
+    buildPluginMeta(options, { stage: "before_semanticAnalyze" })
   );
 
   // orders those chunks (hoists etc) and adds automatic comments (options)
@@ -196,12 +350,14 @@ function mainUniFile(cdrcaCode, options) {
     "semanticAnalyze",
     postSemanticAnalyzed,
     options,
+    buildPluginMeta(options, { stage: "after_semanticAnalyze" })
   );
   postSemanticAnalyzed = pluginAPI.run(
     "before",
     "fullTranspile",
     postSemanticAnalyzed,
     options,
+    buildPluginMeta(options, { stage: "before_fullTranspile" })
   );
 
   // fully combines the code and  template fills the chunks based on Renderer api
@@ -211,12 +367,14 @@ function mainUniFile(cdrcaCode, options) {
     "fullTranspile",
     fullyTranspiled,
     options,
+    buildPluginMeta(options, { stage: "after_fullTranspile" })
   );
   fullyTranspiled = pluginAPI.run(
     "before",
     "postOptionalParse",
     fullyTranspiled,
     options,
+    buildPluginMeta(options, { stage: "before_postOptionalParse" })
   );
 
   // pretifies code and other options (options)
@@ -230,6 +388,7 @@ function mainUniFile(cdrcaCode, options) {
     "postOptionalParse",
     finalResult,
     options,
+    buildPluginMeta(options, { stage: "after_postOptionalParse" })
   );
 
   return (

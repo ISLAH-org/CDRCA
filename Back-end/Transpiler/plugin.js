@@ -4,6 +4,7 @@ const vm = require("vm");
 
 let hooks = {};
 let pluginsRegistry = {};
+let embeddedPluginCounter = 0;
 
 function register(priority, type, process, callback, pluginName = "global") {
   if (typeof callback !== "function") return;
@@ -15,12 +16,30 @@ function register(priority, type, process, callback, pluginName = "global") {
   hooks[hookKey].sort((a, b) => b.priority - a.priority);
 }
 
+function isHookAllowedForMeta(hook, meta) {
+  if (!meta) return true;
+  if (!meta.pluginNames || meta.pluginNames.length === 0) return true;
+  if (meta.pluginNames.includes(hook.pluginName)) return true;
+  // also allow matching by declared plugin base name before embedded suffix
+  const baseName = String(hook.pluginName).split("#embedded_")[0];
+  return meta.pluginNames.includes(baseName);
+}
+
 function run(type, process, initialValue, ...args) {
   let currentValue = initialValue;
   const hookKey = `${type}_${process}`;
   const list = hooks[hookKey];
+  let meta = null;
+  if (args.length > 0) {
+    const lastArg = args[args.length - 1];
+    if (lastArg && typeof lastArg === "object" && lastArg.__pluginMeta === true) {
+      meta = lastArg;
+      args = args.slice(0, -1);
+    }
+  }
   if (list) {
     for (const item of list) {
+      if (!isHookAllowedForMeta(item, meta)) continue;
       const plugin = pluginsRegistry[item.pluginName];
       if (!plugin || plugin.state === "ACTIVE") {
         const result = item.callback(currentValue, ...args);
@@ -35,6 +54,108 @@ function run(type, process, initialValue, ...args) {
 
 function clear() {
   hooks = {};
+}
+
+function parseEmbeddedHookSpec(body) {
+  // v1 embedded plugin mini-language:
+  // on <priority> <type> <process> => return <js-expression>;
+  // on <type> <process> => return <js-expression>;
+  // on syntax rule <ruleName> => return <js-expression>;
+  const hooks = [];
+  if (typeof body !== "string") return hooks;
+  const lines = body
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0 && !l.startsWith("//"));
+
+  for (const line of lines) {
+    if (!line.startsWith("on ")) continue;
+    const exprIndex = line.indexOf("=>");
+    if (exprIndex === -1) continue;
+    const left = line.slice(3, exprIndex).trim();
+    let right = line.slice(exprIndex + 2).trim();
+    if (right.endsWith(";")) right = right.slice(0, -1).trim();
+    if (right.startsWith("return ")) right = right.slice(7).trim();
+
+    const parts = left.split(/\s+/).filter(Boolean);
+    let priority = 0;
+    let startIdx = 0;
+    if (!Number.isNaN(Number(parts[0]))) {
+      priority = Number(parts[0]);
+      startIdx = 1;
+    }
+    const tail = parts.slice(startIdx);
+    if (tail.length >= 3 && tail[0] === "syntax" && tail[1] === "rule") {
+      hooks.push({
+        priority,
+        type: "syntax",
+        process: "customRule",
+        ruleName: tail[2],
+        expression: right,
+      });
+      continue;
+    }
+    if (tail.length >= 2) {
+      hooks.push({
+        priority,
+        type: tail[0],
+        process: tail[1],
+        expression: right,
+      });
+    }
+  }
+  return hooks;
+}
+
+function createExpressionCallback(expression, extra = {}) {
+  return function (currentValue, ...args) {
+    const ctx = {
+      value: currentValue,
+      args,
+      ...extra,
+    };
+    try {
+      const fn = new Function("ctx", `return (${expression});`);
+      return fn(ctx);
+    } catch (error) {
+      throw new Error(`Embedded plugin expression failed: ${error.message}`);
+    }
+  };
+}
+
+function addEmbeddedPlugin(def, options = {}) {
+  if (!def || !def.name) {
+    throw new Error("Embedded plugin definition is invalid");
+  }
+  const name = `${def.name}#embedded_${embeddedPluginCounter++}`;
+  pluginsRegistry[name] = {
+    name,
+    path: "embedded",
+    fullPath: "embedded",
+    uses: [["*", "*"]],
+    permissions: ["trusted", "embedded"],
+    state: "ACTIVE",
+    origin: "cdrca-embedded",
+    scope: def.scope || "file",
+    trusted: def.trusted !== false,
+    source: def,
+  };
+
+  const parsedHooks = parseEmbeddedHookSpec(def.body || "");
+  for (const hook of parsedHooks) {
+    const cb = createExpressionCallback(hook.expression, {
+      pluginName: def.name,
+      ruleName: hook.ruleName || null,
+      filePath: options.filePath || null,
+    });
+    register(hook.priority || 0, hook.type, hook.process, cb, name);
+  }
+
+  return { runtimeName: name, parsedHooks };
+}
+
+function getHookMap() {
+  return hooks;
 }
 
 function seizePlugin(name) {
@@ -308,6 +429,8 @@ module.exports = {
   register,
   run,
   clear,
+  getHookMap,
+  addEmbeddedPlugin,
   getPluginsList,
   stopPlugin,
   pausePlugin,
